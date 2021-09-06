@@ -1,6 +1,6 @@
 {
   "name": "pg-gql-pubsub",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "author": "PabloSz <pablosaez1995@gmail.com>",
   "exports": {

@@ -15,7 +15,7 @@ type DeepPartialObject<T> = {
   [P in keyof T]?: PromiseOrValue<DeepPartial<PromiseOrValue<T[P]>>>;
 };
 
-export interface PubSubChannels extends Record<string, any> {}
+export interface PubSubChannels {}
 
 const validateChannelLength = (channel: string) => {
   if (channel.length > 63) {
@@ -25,13 +25,23 @@ const validateChannelLength = (channel: string) => {
   }
 };
 
-export const PubSub = ({
+export type PubSub = {
+  subscribe<TKey extends keyof PubSubChannels>(
+    ...channelsArg: TKey[]
+  ): Promise<AsyncGenerator<PubSubChannels[TKey]>>;
+  publish<TKey extends keyof PubSubChannels, TKeys extends TKey[]>(
+    data: Required<DeepPartial<PubSubChannels[TKey]>>,
+    ...channels: TKeys
+  ): Promise<void>;
+};
+
+export const CreatePubSub = ({
   connectionString,
   prefix,
 }: {
   connectionString: string;
   prefix?: string;
-}) => {
+}): PubSub => {
   assert(
     typeof connectionString === "string" && connectionString.length,
     "Connection string not specified!"
@@ -98,20 +108,20 @@ export const PubSub = ({
         valuePromise = createDeferredPromise();
       };
       listeners.push([channel, listener]);
-      imqueuePubSub.channels.on(channel.toString(), listener);
+      imqueuePubSub.channels.on(channel as string, listener);
     }
 
     function unsubscribe() {
       for (const [channel, listener] of listeners) {
-        imqueuePubSub.channels.removeListener(channel.toString(), listener);
+        imqueuePubSub.channels.removeListener(channel as string, listener);
       }
       for (const channel of channels) {
-        if (imqueuePubSub.channels.listenerCount(channel.toString()) === 0) {
-          imqueuePubSub.unlisten(channel.toString()).catch(console.error);
+        if (imqueuePubSub.channels.listenerCount(channel as string) === 0) {
+          imqueuePubSub.unlisten(channel as string).catch(console.error);
         }
       }
 
-      valuePromise?.resolve(doneSymbol);
+      valuePromise?.resolve(doneSymbol as any);
       valuePromise = null;
     }
 
@@ -138,7 +148,7 @@ export const PubSub = ({
       channels.map((channelName) => {
         const channel = channelPrefix + channelName;
         validateChannelLength(channel);
-        return imqueuePubSub.notify(channel, data).catch(console.error);
+        return imqueuePubSub.notify(channel, data as any).catch(console.error);
       })
     );
   }
