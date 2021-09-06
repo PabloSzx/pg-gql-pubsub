@@ -29,9 +29,9 @@ export type PubSub = {
   subscribe<TKey extends keyof PubSubChannels>(
     ...channelsArg: TKey[]
   ): Promise<AsyncGenerator<PubSubChannels[TKey]>>;
-  publish<TKey extends keyof PubSubChannels, TKeys extends TKey[]>(
-    data: Required<DeepPartial<PubSubChannels[TKey]>>,
-    ...channels: TKeys
+  publish<TKey extends keyof PubSubChannels>(
+    channel: TKey,
+    data: Required<DeepPartial<PubSubChannels[TKey]>>
   ): Promise<void>;
   close: () => Promise<void>;
   pgPubSub: PgPubSub;
@@ -85,7 +85,7 @@ export const CreatePubSub = ({
 
   const unsubscribes = new Set<() => void>();
 
-  async function subscribe<TKey extends keyof PubSubChannels, TKeys extends TKey[]>(
+  async function subscribe<TKey extends keyof PubSubChannels>(
     ...channelsArg: TKey[]
   ): Promise<AsyncGenerator<PubSubChannels[TKey]>> {
     if (pubSubPromise) await pubSubPromise;
@@ -102,8 +102,8 @@ export const CreatePubSub = ({
       })
     );
 
-    let valuePromise: DeferredPromise<PubSubChannels[TKeys[number]]> | null =
-      createDeferredPromise<PubSubChannels[TKeys[number]]>();
+    let valuePromise: DeferredPromise<PubSubChannels[TKey]> | null =
+      createDeferredPromise<PubSubChannels[TKey]>();
 
     let listeners: [TKey, (payload: unknown) => void][] = [];
     for (const channel of channels) {
@@ -112,16 +112,16 @@ export const CreatePubSub = ({
         valuePromise = createDeferredPromise();
       };
       listeners.push([channel, listener]);
-      imqueuePubSub.channels.on(channel as string, listener);
+      imqueuePubSub.channels.on(channel, listener);
     }
 
     function unsubscribe() {
       for (const [channel, listener] of listeners) {
-        imqueuePubSub.channels.removeListener(channel as string, listener);
+        imqueuePubSub.channels.removeListener(channel, listener);
       }
       for (const channel of channels) {
-        if (imqueuePubSub.channels.listenerCount(channel as string) === 0) {
-          imqueuePubSub.unlisten(channel as string).catch(console.error);
+        if (imqueuePubSub.channels.listenerCount(channel) === 0) {
+          imqueuePubSub.unlisten(channel).catch(console.error);
         }
       }
 
@@ -148,17 +148,13 @@ export const CreatePubSub = ({
     return iteratorGenerator();
   }
 
-  async function publish<TKey extends keyof PubSubChannels, TKeys extends TKey[]>(
-    data: Required<DeepPartial<PubSubChannels[TKey]>>,
-    ...channels: TKeys
+  async function publish<TKey extends keyof PubSubChannels>(
+    channel: TKey,
+    data: Required<DeepPartial<PubSubChannels[TKey]>>
   ) {
-    await Promise.all(
-      channels.map((channelName) => {
-        const channel = channelPrefix + channelName;
-        validateChannelLength(channel);
-        return imqueuePubSub.notify(channel, data as any).catch(console.error);
-      })
-    );
+    const channelIdentifier = channelPrefix + channel;
+    validateChannelLength(channelIdentifier);
+    return imqueuePubSub.notify(channelIdentifier, data as any).catch(console.error);
   }
 
   return {
