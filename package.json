@@ -1,0 +1,42 @@
+{
+  "name": "pg-gql-pubsub",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "PabloSz <pablosaez1995@gmail.com>",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    },
+    "./*": {
+      "require": "./dist/*.js",
+      "import": "./dist/*.mjs"
+    }
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepare": "bob-ts -f interop -i src -d dist && tsc",
+    "prepack": "bob-ts -f interop -i src -d dist && tsc",
+    "test": "bob-ts -i test -d dist-test && c8 mocha dist-test"
+  },
+  "mocha": {
+    "enable-source-maps": true
+  },
+  "dependencies": {
+    "@graphql-ez/utils": "^0.1.2",
+    "@imqueue/pg-pubsub": "^1.5.1"
+  },
+  "devDependencies": {
+    "@types/mocha": "^9.0.0",
+    "@types/node": "^16.7.10",
+    "bob-ts": "^1.0.5",
+    "c8": "^7.8.0",
+    "mocha": "^9.1.1",
+    "typescript": "^4.4.2"
+  }
+}
