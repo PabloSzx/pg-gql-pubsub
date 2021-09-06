@@ -33,6 +33,7 @@ export type PubSub = {
     data: Required<DeepPartial<PubSubChannels[TKey]>>,
     ...channels: TKeys
   ): Promise<void>;
+  close: () => Promise<void>;
 };
 
 export const CreatePubSub = ({
@@ -153,5 +154,5 @@ export const CreatePubSub = ({
     );
   }
 
-  return { subscribe, publish };
+  return { subscribe, publish, close: imqueuePubSub.close };
 };
