@@ -1,6 +1,6 @@
 import { createDeferredPromise, DeferredPromise } from "@graphql-ez/utils/promise";
-import { PgPubSub } from "@imqueue/pg-pubsub";
-import assert from "assert";
+import { PgPubSub, PgPubSubOptions } from "@imqueue/pg-pubsub";
+
 type PromiseOrValue<T> = T | Promise<T>;
 
 type DeepPartial<T> = T extends Function
@@ -15,7 +15,7 @@ type DeepPartialObject<T> = {
   [P in keyof T]?: PromiseOrValue<DeepPartial<PromiseOrValue<T[P]>>>;
 };
 
-export interface PubSubChannels {}
+export interface Channels {}
 
 const validateChannelLength = (channel: string) => {
   if (channel.length > 63) {
@@ -25,13 +25,38 @@ const validateChannelLength = (channel: string) => {
   }
 };
 
-export type PubSub = {
-  subscribe<TKey extends keyof PubSubChannels>(
-    ...channelsArg: TKey[]
-  ): Promise<AsyncGenerator<PubSubChannels[TKey]>>;
-  publish<TKey extends keyof PubSubChannels>(
-    channel: TKey,
-    data: Required<DeepPartial<PubSubChannels[TKey]>>
+export interface PubSubOptions extends Partial<PgPubSubOptions> {
+  /**
+   * Prefix to be added before every channel
+   */
+  prefix?: string;
+
+  /**
+   * Add Database Schema as prefix in every channel.
+   *
+   * By default it reuses the "schema" query paramemter in the `connectionString`.
+   *
+   * Set as `false` to not re-use "schema" of `connectionstring`
+   */
+  databaseSchema?: string | false;
+
+  /**
+   * Boolean flag, which turns off/on single listener mode. By default is
+   * set to false, so instantiated PgPubSub connections won't act using
+   * inter-process locking mechanism.
+   *
+   * @default false
+   */
+  singleListener?: boolean;
+}
+
+export declare type PubSub = {
+  subscribe<TChannel extends keyof Channels>(
+    ...channels: [TChannel, ...TChannel[]]
+  ): Promise<AsyncGenerator<Channels[TChannel]>>;
+  publish<TChannel extends keyof Channels>(
+    channel: TChannel,
+    data: Required<DeepPartial<Channels[TChannel]>>
   ): Promise<void>;
   close: () => Promise<void>;
   pgPubSub: PgPubSub;
@@ -40,27 +65,26 @@ export type PubSub = {
 export const CreatePubSub = ({
   connectionString,
   prefix,
-}: {
-  connectionString: string;
-  prefix?: string;
-}): PubSub => {
-  assert(
-    typeof connectionString === "string" && connectionString.length,
-    "Connection string not specified!"
-  );
-  const connectionUrl = new URL(connectionString);
+  databaseSchema,
+  singleListener = false,
+  ...options
+}: PubSubOptions): PubSub => {
+  const databaseSchemaName =
+    databaseSchema ||
+    (databaseSchema !== false && connectionString
+      ? new URL(connectionString).searchParams.get("schema")
+      : null);
+  const channelPrefix =
+    (prefix ? prefix + "_" : "") + (databaseSchemaName ? databaseSchemaName + "_" : "");
 
-  const databaseSchema = connectionUrl.searchParams.get("schema") || "public";
-
-  const channelPrefix = databaseSchema.toUpperCase() + "_" + (prefix ? prefix + "_" : "");
-
-  const imqueuePubSub = new PgPubSub({
+  const pgPubSub = new PgPubSub({
     connectionString,
-    singleListener: false,
+    singleListener,
+    ...options,
   });
 
   function resolveConnect(resolve: (value: void | PromiseLike<void>) => void) {
-    imqueuePubSub.connect().then(resolve, (err) => {
+    pgPubSub.connect().then(resolve, (err) => {
       console.error(err);
       setTimeout(() => {
         connectPubSub(resolve);
@@ -85,9 +109,9 @@ export const CreatePubSub = ({
 
   const unsubscribes = new Set<() => void>();
 
-  async function subscribe<TKey extends keyof PubSubChannels>(
-    ...channelsArg: TKey[]
-  ): Promise<AsyncGenerator<PubSubChannels[TKey]>> {
+  async function subscribe<TChannel extends keyof Channels>(
+    ...channelsArg: [TChannel, ...TChannel[]]
+  ): Promise<AsyncGenerator<Channels[TChannel]>> {
     if (pubSubPromise) await pubSubPromise;
 
     const doneSymbol = Symbol("done");
@@ -98,30 +122,30 @@ export const CreatePubSub = ({
       channelsArg.map((channelValue) => {
         const channel = `${channelPrefix}${channelValue}`;
         validateChannelLength(channel);
-        return imqueuePubSub.listen(channel).then(() => channel as TKey);
+        return pgPubSub.listen(channel).then(() => channel as TChannel);
       })
     );
 
-    let valuePromise: DeferredPromise<PubSubChannels[TKey]> | null =
-      createDeferredPromise<PubSubChannels[TKey]>();
+    let valuePromise: DeferredPromise<Channels[TChannel]> | null =
+      createDeferredPromise<Channels[TChannel]>();
 
-    let listeners: [TKey, (payload: unknown) => void][] = [];
+    let listeners: [TChannel, (payload: unknown) => void][] = [];
     for (const channel of channels) {
       const listener = (payload: any) => {
         valuePromise?.resolve(payload);
         valuePromise = createDeferredPromise();
       };
       listeners.push([channel, listener]);
-      imqueuePubSub.channels.on(channel, listener);
+      pgPubSub.channels.on(channel, listener);
     }
 
     function unsubscribe() {
       for (const [channel, listener] of listeners) {
-        imqueuePubSub.channels.removeListener(channel, listener);
+        pgPubSub.channels.removeListener(channel, listener);
       }
       for (const channel of channels) {
-        if (imqueuePubSub.channels.listenerCount(channel) === 0) {
-          imqueuePubSub.unlisten(channel).catch(console.error);
+        if (pgPubSub.channels.listenerCount(channel) === 0) {
+          pgPubSub.unlisten(channel).catch(console.error);
         }
       }
 
@@ -148,13 +172,13 @@ export const CreatePubSub = ({
     return iteratorGenerator();
   }
 
-  async function publish<TKey extends keyof PubSubChannels>(
-    channel: TKey,
-    data: Required<DeepPartial<PubSubChannels[TKey]>>
+  async function publish<TChannel extends keyof Channels>(
+    channel: TChannel,
+    data: Required<DeepPartial<Channels[TChannel]>>
   ) {
     const channelIdentifier = channelPrefix + channel;
     validateChannelLength(channelIdentifier);
-    return imqueuePubSub.notify(channelIdentifier, data as any).catch(console.error);
+    return pgPubSub.notify(channelIdentifier, data as any).catch(console.error);
   }
 
   return {
@@ -162,8 +186,8 @@ export const CreatePubSub = ({
     publish,
     close: async () => {
       unsubscribes.forEach((unsub) => unsub());
-      await Promise.allSettled([imqueuePubSub.close(), imqueuePubSub.unlistenAll()]);
+      await Promise.allSettled([pgPubSub.close(), pgPubSub.unlistenAll()]);
     },
-    pgPubSub: imqueuePubSub,
+    pgPubSub,
   };
 };
