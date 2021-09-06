@@ -34,6 +34,7 @@ export type PubSub = {
     ...channels: TKeys
   ): Promise<void>;
   close: () => Promise<void>;
+  pgPubSub: PgPubSub;
 };
 
 export const CreatePubSub = ({
@@ -82,6 +83,8 @@ export const CreatePubSub = ({
     });
   });
 
+  const unsubscribes = new Set<() => void>();
+
   async function subscribe<TKey extends keyof PubSubChannels, TKeys extends TKey[]>(
     ...channelsArg: TKey[]
   ): Promise<AsyncGenerator<PubSubChannels[TKey]>> {
@@ -124,7 +127,11 @@ export const CreatePubSub = ({
 
       valuePromise?.resolve(doneSymbol as any);
       valuePromise = null;
+
+      unsubscribes.delete(unsubscribe);
     }
+
+    unsubscribes.add(unsubscribe);
 
     async function* iteratorGenerator() {
       while (valuePromise?.promise) {
@@ -154,5 +161,13 @@ export const CreatePubSub = ({
     );
   }
 
-  return { subscribe, publish, close: imqueuePubSub.close };
+  return {
+    subscribe,
+    publish,
+    close: async () => {
+      unsubscribes.forEach((unsub) => unsub());
+      await Promise.allSettled([imqueuePubSub.close(), imqueuePubSub.unlistenAll()]);
+    },
+    pgPubSub: imqueuePubSub,
+  };
 };
