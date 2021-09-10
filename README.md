@@ -37,7 +37,7 @@ export const pubSub = CreatePubSub({
 // ...
 
 pubSub.subscribe("notification").then(iterator => {
-  for (const data of iterator) {
+  for await (const data of iterator) {
     // data <=> string
     console.log(data)
   }
@@ -83,7 +83,7 @@ const resolvers = {
 }
 
 pubSub.subscribe("notification").then(iterator => {
-  for (const data of iterator) {
+  for await (const data of iterator) {
     // data <=> { notification: "Hello World" } 
     console.log(data)
   }
