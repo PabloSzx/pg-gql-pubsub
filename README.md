@@ -1,5 +1,7 @@
 # pg-gql-pubsub
 
+Full type-safe PostgreSQL PubSub (using NOTIFY and LISTEN) with smart reconnection and specially designed for GraphQL API Usage, powered mainly by the great library: [@imqueue/pg-pubsub](https://github.com/imqueue/pg-pubsub)
+
 [![https://npm.im/pg-gql-pubsub](https://shields.io/npm/v/pg-gql-pubsub)](https://npm.im/pg-gql-pubsub)
 
 ```
