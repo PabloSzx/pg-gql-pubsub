@@ -48,6 +48,9 @@ pubSub.publish("notification", "Hello World");
 
 
 ```ts
+
+// Assumming `type Subscription { notification: String! }`
+
 import type { Subscription } from "../generated/graphql.ts";
 import { CreatePubSub } from "pg-gql-pubsub";
 
@@ -65,13 +68,14 @@ export const pubSub = CreatePubSub({
 
 pubSub.subscribe("notification").then(iterator => {
   for (const data of iterator) {
+    // data <=> { notification: "Hello World" } 
     console.log(data)
   }
 })
 
 // ...
 
-pubSub.publish("notification", "Hello World");
+pubSub.publish("notification", { notification: "Hello World" });
 
 ```
 
