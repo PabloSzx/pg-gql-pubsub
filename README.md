@@ -76,7 +76,7 @@ const resolvers = {
     notification: {
       subscribe(_root, _args, { pubSub }) {
         // Assumming you already added the pubSub to your context
-        return pubSub.subscribe("hello");
+        return pubSub.subscribe("notification");
       },
     },
   },
