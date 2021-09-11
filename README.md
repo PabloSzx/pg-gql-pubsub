@@ -23,7 +23,6 @@ npm install pg-gql-pubsub
 ```ts
 import { CreatePubSub } from "pg-gql-pubsub";
 
-
 declare module "pg-gql-pubsub" {
   interface Channels {
     notification: string;
@@ -36,12 +35,12 @@ export const pubSub = CreatePubSub({
 
 // ...
 
-pubSub.subscribe("notification").then(async iterator => {
+pubSub.subscribe("notification").then(async (iterator) => {
   for await (const data of iterator) {
     // data <=> string
-    console.log(data)
+    console.log(data);
   }
-})
+});
 
 // ...
 
@@ -50,9 +49,7 @@ pubSub.publish("notification", "Hello World");
 
 ### With GraphQL Code Generator
 
-
 ```ts
-
 // Assumming `type Subscription { notification: String! }`
 
 import type { Subscription } from "../generated/graphql.ts";
@@ -70,7 +67,6 @@ export const pubSub = CreatePubSub({
 
 // ...
 
-
 const resolvers = {
   Subscription: {
     notification: {
@@ -80,19 +76,14 @@ const resolvers = {
       },
     },
   },
-}
+};
 
-pubSub.subscribe("notification").then(async iterator => {
-  for await (const data of iterator) {
-    // data <=> { notification: "Hello World" } 
-    console.log(data)
-  }
-})
+for await (const data of pubSub.subscribe("notification")) {
+  // data <=> { notification: "Hello World" }
+  console.log(data);
+}
 
 // ...
 
 pubSub.publish("notification", { notification: "Hello World" });
-
 ```
-
-

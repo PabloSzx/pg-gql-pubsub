@@ -1,9 +1,9 @@
 import { createDeferredPromise, DeferredPromise } from "@graphql-ez/utils/promise";
 import { PgPubSub, PgPubSubOptions } from "@imqueue/pg-pubsub";
 
-type PromiseOrValue<T> = T | Promise<T>;
+export type PromiseOrValue<T> = T | Promise<T>;
 
-type DeepPartial<T> = T extends Function
+export type DeepPartial<T> = T extends Function
   ? T
   : T extends Array<infer U>
   ? DeepPartialArray<U>
@@ -53,22 +53,25 @@ export interface PubSubOptions extends Partial<PgPubSubOptions> {
 export declare type PubSub = {
   subscribe<TChannel extends keyof Channels>(
     ...channels: [TChannel, ...TChannel[]]
-  ): Promise<AsyncGenerator<Channels[TChannel]>>;
+  ): AsyncGenerator<Channels[TChannel]>;
   publish<TChannel extends keyof Channels>(
     channel: TChannel,
     data: Required<DeepPartial<Channels[TChannel]>>
   ): Promise<void>;
   close: () => Promise<void>;
   pgPubSub: PgPubSub;
+  withFilter: typeof withFilter;
 };
 
-export const CreatePubSub = ({
-  connectionString,
-  prefix,
-  databaseSchema,
-  singleListener = false,
-  ...options
-}: PubSubOptions): PubSub => {
+export const CreatePubSub = (options: PubSubOptions): PubSub => {
+  const {
+    connectionString,
+    prefix,
+    databaseSchema,
+    singleListener = false,
+    ...restOptions
+  } = options;
+
   const databaseSchemaName =
     databaseSchema ||
     (databaseSchema !== false && connectionString
@@ -80,7 +83,7 @@ export const CreatePubSub = ({
   const pgPubSub = new PgPubSub({
     connectionString,
     singleListener,
-    ...options,
+    ...restOptions,
   });
 
   function resolveConnect(resolve: (value: void | PromiseLike<void>) => void) {
@@ -109,9 +112,9 @@ export const CreatePubSub = ({
 
   const unsubscribes = new Set<() => void>();
 
-  async function subscribe<TChannel extends keyof Channels>(
+  async function* subscribe<TChannel extends keyof Channels>(
     ...channelsArg: [TChannel, ...TChannel[]]
-  ): Promise<AsyncGenerator<Channels[TChannel]>> {
+  ): AsyncGenerator<Channels[TChannel]> {
     if (pubSubPromise) await pubSubPromise;
 
     const doneSymbol = Symbol("done");
@@ -119,17 +122,19 @@ export const CreatePubSub = ({
     if (!channelsArg.length) throw Error("No channels specified!");
 
     const channels = await Promise.all(
-      channelsArg.map((channelValue) => {
+      channelsArg.map(async (channelValue) => {
         const channel = `${channelPrefix}${channelValue}`;
         validateChannelLength(channel);
-        return pgPubSub.listen(channel).then(() => channel as TChannel);
+        await pgPubSub.listen(channel);
+
+        return channel;
       })
     );
 
     let valuePromise: DeferredPromise<Channels[TChannel]> | null =
       createDeferredPromise<Channels[TChannel]>();
 
-    let listeners: [TChannel, (payload: unknown) => void][] = [];
+    let listeners: [string, (payload: unknown) => void][] = [];
     for (const channel of channels) {
       const listener = (payload: any) => {
         valuePromise?.resolve(payload);
@@ -149,7 +154,10 @@ export const CreatePubSub = ({
         }
       }
 
-      valuePromise?.resolve(doneSymbol as any);
+      valuePromise?.resolve(
+        //@ts-expect-error
+        doneSymbol
+      );
       valuePromise = null;
 
       unsubscribes.delete(unsubscribe);
@@ -157,19 +165,13 @@ export const CreatePubSub = ({
 
     unsubscribes.add(unsubscribe);
 
-    async function* iteratorGenerator() {
-      while (valuePromise?.promise) {
-        const value = await valuePromise.promise;
+    while (valuePromise?.promise) {
+      const value = await valuePromise.promise;
 
-        if (value != doneSymbol) {
-          yield value;
-        }
-      }
-
-      unsubscribe();
+      if (value !== doneSymbol) yield value;
     }
 
-    return iteratorGenerator();
+    unsubscribe();
   }
 
   async function publish<TChannel extends keyof Channels>(
@@ -178,7 +180,13 @@ export const CreatePubSub = ({
   ) {
     const channelIdentifier = channelPrefix + channel;
     validateChannelLength(channelIdentifier);
-    return pgPubSub.notify(channelIdentifier, data as any).catch(console.error);
+    return pgPubSub
+      .notify(
+        channelIdentifier,
+        //@ts-expect-error
+        data
+      )
+      .catch(console.error);
   }
 
   return {
@@ -189,5 +197,23 @@ export const CreatePubSub = ({
       await Promise.allSettled([pgPubSub.close(), pgPubSub.unlistenAll()]);
     },
     pgPubSub,
+    withFilter,
   };
 };
+
+export function withFilter<TData, TFilteredData extends TData>(
+  iterator: PromiseOrValue<AsyncGenerator<TData>>,
+  filter: (data: TData) => data is TFilteredData
+): AsyncGenerator<TFilteredData>;
+export function withFilter<TData>(
+  iterator: PromiseOrValue<AsyncGenerator<TData>>,
+  filter: (data: TData) => boolean
+): AsyncGenerator<TData>;
+export async function* withFilter<TData>(
+  iterator: PromiseOrValue<AsyncGenerator<TData>>,
+  filter: (data: TData) => boolean
+) {
+  for await (const value of await iterator) {
+    if (filter(value)) yield value;
+  }
+}

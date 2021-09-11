@@ -1,6 +1,6 @@
 {
   "name": "pg-gql-pubsub",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "license": "MIT",
   "author": "PabloSz <pablosaez1995@gmail.com>",
   "exports": {
@@ -11,7 +11,8 @@
     "./*": {
       "require": "./dist/*.js",
       "import": "./dist/*.mjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -20,23 +21,17 @@
     "dist"
   ],
   "scripts": {
-    "prepare": "bob-ts -f interop -i src -d dist && tsc",
-    "prepack": "bob-ts -f interop -i src -d dist && tsc",
-    "test": "bob-ts -i test -d dist-test && c8 mocha dist-test"
-  },
-  "mocha": {
-    "enable-source-maps": true
+    "prepare": "bob-ts -t es2019 -f interop -i src -d dist && tsc",
+    "prepack": "bob-ts -t es2019 -f interop -i src -d dist && tsc"
   },
   "dependencies": {
     "@graphql-ez/utils": "^0.1.2",
-    "@imqueue/pg-pubsub": "^1.5.1"
+    "@imqueue/pg-pubsub": "^1.5.2"
   },
   "devDependencies": {
-    "@types/mocha": "^9.0.0",
-    "@types/node": "^16.7.10",
+    "@types/node": "^16.9.1",
     "bob-ts": "^1.0.5",
-    "c8": "^7.8.0",
-    "mocha": "^9.1.1",
-    "typescript": "^4.4.2"
+    "esbuild": "^0.12.26",
+    "typescript": "^4.4.3"
   }
 }
