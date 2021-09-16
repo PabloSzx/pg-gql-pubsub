@@ -1,16 +1,12 @@
 {
   "name": "pg-gql-pubsub",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "author": "PabloSz <pablosaez1995@gmail.com>",
   "exports": {
     ".": {
       "require": "./dist/index.js",
       "import": "./dist/index.mjs"
-    },
-    "./*": {
-      "require": "./dist/*.js",
-      "import": "./dist/*.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -25,7 +21,6 @@
     "prepack": "bob-ts -t es2019 -f interop -i src -d dist && tsc"
   },
   "dependencies": {
-    "@graphql-ez/utils": "^0.1.2",
     "@imqueue/pg-pubsub": "^1.5.2"
   },
   "devDependencies": {

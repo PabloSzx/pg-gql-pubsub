@@ -1,4 +1,3 @@
-import { createDeferredPromise, DeferredPromise } from "@graphql-ez/utils/promise";
 import { PgPubSub, PgPubSubOptions } from "@imqueue/pg-pubsub";
 
 export type PromiseOrValue<T> = T | Promise<T>;
@@ -14,6 +13,27 @@ interface DeepPartialArray<T> extends Array<PromiseOrValue<DeepPartial<PromiseOr
 type DeepPartialObject<T> = {
   [P in keyof T]?: PromiseOrValue<DeepPartial<PromiseOrValue<T[P]>>>;
 };
+
+interface PubSubDeferredPromise<T> {
+  promise: Promise<void>;
+  resolve: () => void;
+  isDone: boolean;
+  values: Array<T>;
+}
+
+function pubsubDeferredPromise<T = void>(): PubSubDeferredPromise<T> {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolveFn) => {
+    resolve = resolveFn;
+  });
+
+  return {
+    promise,
+    resolve,
+    values: [],
+    isDone: false,
+  };
+}
 
 export interface Channels {}
 
@@ -117,8 +137,6 @@ export const CreatePubSub = (options: PubSubOptions): PubSub => {
   ): AsyncGenerator<Channels[TChannel]> {
     if (pubSubPromise) await pubSubPromise;
 
-    const doneSymbol = Symbol("done");
-
     if (!channelsArg.length) throw Error("No channels specified!");
 
     const channels = await Promise.all(
@@ -131,14 +149,16 @@ export const CreatePubSub = (options: PubSubOptions): PubSub => {
       })
     );
 
-    let valuePromise: DeferredPromise<Channels[TChannel]> | null =
-      createDeferredPromise<Channels[TChannel]>();
+    let valuePromise: PubSubDeferredPromise<Channels[TChannel]> | null =
+      pubsubDeferredPromise<Channels[TChannel]>();
 
     let listeners: [string, (payload: unknown) => void][] = [];
     for (const channel of channels) {
       const listener = (payload: any) => {
-        valuePromise?.resolve(payload);
-        valuePromise = createDeferredPromise();
+        if (valuePromise == null) return;
+
+        valuePromise.values.push(payload);
+        valuePromise.resolve();
       };
       listeners.push([channel, listener]);
       pgPubSub.channels.on(channel, listener);
@@ -154,21 +174,28 @@ export const CreatePubSub = (options: PubSubOptions): PubSub => {
         }
       }
 
-      valuePromise?.resolve(
-        //@ts-expect-error
-        doneSymbol
-      );
-      valuePromise = null;
+      if (valuePromise) {
+        valuePromise.resolve();
+        valuePromise.isDone = true;
+
+        valuePromise = null;
+      }
 
       unsubscribes.delete(unsubscribe);
     }
 
     unsubscribes.add(unsubscribe);
 
-    while (valuePromise?.promise) {
-      const value = await valuePromise.promise;
+    while (valuePromise) {
+      await valuePromise.promise;
 
-      if (value !== doneSymbol) yield value;
+      for (const value of valuePromise.values) yield value;
+
+      if (valuePromise.isDone) {
+        valuePromise = null;
+      } else {
+        valuePromise = pubsubDeferredPromise();
+      }
     }
 
     unsubscribe();
