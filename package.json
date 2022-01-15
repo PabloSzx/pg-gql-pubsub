@@ -1,6 +1,6 @@
 {
   "name": "pg-gql-pubsub",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "author": "PabloSz <pablosaez1995@gmail.com>",
   "exports": {
@@ -17,16 +17,16 @@
     "dist"
   ],
   "scripts": {
-    "prepare": "bob-ts -t es2019 -f interop -i src -d dist && tsc",
-    "prepack": "bob-ts -t es2019 -f interop -i src -d dist && tsc"
+    "prepare": "bob-ts -t es2019 -f interop -i src -d dist --no-sourcemap && tsc",
+    "prepack": "bob-ts -t es2019 -f interop -i src -d dist --no-sourcemap && tsc"
   },
   "dependencies": {
-    "@imqueue/pg-pubsub": "^1.5.2"
+    "@imqueue/pg-pubsub": "^1.5.5"
   },
   "devDependencies": {
-    "@types/node": "^16.9.1",
-    "bob-ts": "^1.0.5",
-    "esbuild": "^0.12.26",
-    "typescript": "^4.4.3"
+    "@types/node": "^17.0.8",
+    "bob-ts": "^3.0.1",
+    "esbuild": "^0.14.11",
+    "typescript": "^4.5.4"
   }
 }

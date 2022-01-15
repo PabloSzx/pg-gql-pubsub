@@ -1,6 +1,10 @@
 import { PgPubSub, PgPubSubOptions } from "@imqueue/pg-pubsub";
-
-export type PromiseOrValue<T> = T | Promise<T>;
+import {
+  LazyPromise,
+  PromiseOrValue,
+  pubsubDeferredPromise,
+  PubSubDeferredPromise,
+} from "./promise";
 
 export type DeepPartial<T> = T extends Function
   ? T
@@ -13,27 +17,6 @@ interface DeepPartialArray<T> extends Array<PromiseOrValue<DeepPartial<PromiseOr
 type DeepPartialObject<T> = {
   [P in keyof T]?: PromiseOrValue<DeepPartial<PromiseOrValue<T[P]>>>;
 };
-
-interface PubSubDeferredPromise<T> {
-  promise: Promise<void>;
-  resolve: () => void;
-  isDone: boolean;
-  values: Array<T>;
-}
-
-function pubsubDeferredPromise<T = void>(): PubSubDeferredPromise<T> {
-  let resolve!: () => void;
-  const promise = new Promise<void>((resolveFn) => {
-    resolve = resolveFn;
-  });
-
-  return {
-    promise,
-    resolve,
-    values: [],
-    isDone: false,
-  };
-}
 
 export interface Channels {}
 
@@ -78,6 +61,7 @@ export declare type PubSub = {
     channel: TChannel,
     data: Required<DeepPartial<Channels[TChannel]>>
   ): Promise<void>;
+  connect: () => Promise<void>;
   close: () => Promise<void>;
   pgPubSub: PgPubSub;
   withFilter: typeof withFilter;
@@ -123,11 +107,9 @@ export const CreatePubSub = (options: PubSubOptions): PubSub => {
     return new Promise<void>((resolve) => resolveConnect(resolve));
   }
 
-  let pubSubPromise: Promise<void> | false = new Promise<void>((resolve) => {
-    connectPubSub().then(() => {
-      pubSubPromise = false;
-      resolve();
-    });
+  let pubSubPromise: Promise<void> | false = LazyPromise(async () => {
+    await connectPubSub();
+    pubSubPromise = false;
   });
 
   const unsubscribes = new Set<() => void>();
@@ -205,6 +187,8 @@ export const CreatePubSub = (options: PubSubOptions): PubSub => {
     channel: TChannel,
     data: Required<DeepPartial<Channels[TChannel]>>
   ) {
+    if (pubSubPromise) await pubSubPromise;
+
     const channelIdentifier = channelPrefix + channel;
     validateChannelLength(channelIdentifier);
     return pgPubSub
@@ -220,11 +204,14 @@ export const CreatePubSub = (options: PubSubOptions): PubSub => {
     subscribe,
     publish,
     close: async () => {
-      unsubscribes.forEach((unsub) => unsub());
+      for (const unsub of unsubscribes) unsub();
       await Promise.allSettled([pgPubSub.close(), pgPubSub.unlistenAll()]);
     },
     pgPubSub,
     withFilter,
+    async connect() {
+      await pubSubPromise;
+    },
   };
 };
 
