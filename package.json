@@ -1,6 +1,6 @@
 {
   "name": "pg-gql-pubsub",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "license": "MIT",
   "author": "PabloSz <pablosaez1995@gmail.com>",
   "exports": {
@@ -21,7 +21,7 @@
     "prepare": "bob-ts -t es2019 -f interop -i src -d dist --no-sourcemap && tsc"
   },
   "dependencies": {
-    "@imqueue/pg-pubsub": "^1.6.0"
+    "@imqueue/pg-pubsub": "1.5.12"
   },
   "devDependencies": {
     "@types/node": "^17.0.35",
